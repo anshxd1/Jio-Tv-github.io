@@ -947,7 +947,7 @@
     });
     
     function loadChannels() {
-      fetch('https://raw.githubusercontent.com/anshxd1/jstr/refs/heads/main/jstr.php')
+      fetch('https://raw.githubusercontent.com/anshxd1/jstr/refs/heads/main/jstr.json')
         .then(res => res.json())
         .then(data => {
           allChannels = data.filter(channel => channel.mpd); // Filter out non-playable channels
@@ -1496,4 +1496,5 @@
 </body>
 
 </html>
+
 
