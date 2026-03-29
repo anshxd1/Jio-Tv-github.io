@@ -118,6 +118,7 @@
     .brand i {
       background: linear-gradient(135deg, var(--primary), var(--secondary));
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
       filter: drop-shadow(0 0 8px var(--primary-glow));
     }
@@ -515,6 +516,16 @@
       transform: translateY(0);
     }
 
+    .player-wrapper.controls-hidden .custom-controls {
+      opacity: 0;
+      transform: translateY(10px);
+      pointer-events: none;
+    }
+    
+    .player-wrapper.controls-hidden {
+      cursor: none;
+    }
+
     .control-row {
       display: flex;
       align-items: center;
@@ -559,6 +570,7 @@
       flex: 1;
       height: 4px;
       -webkit-appearance: none;
+      appearance: none;
       background: rgba(255, 255, 255, 0.2);
       border-radius: 2px;
       outline: none;
@@ -815,8 +827,15 @@
       player.getNetworkingEngine().registerRequestFilter((type, request) => {
         const channel = player.appData_channel;
         if (!channel) return;
-        if (channel.referer) request.headers["Referer"] = channel.referer;
-        if (channel.userAgent) request.headers["User-Agent"] = channel.userAgent;
+
+        // On Desktop, Forbidden Headers (Referer/UA) are handled via URL bypass in playStream.
+        // We only set them in headers for Mobile/Apps where it's allowed.
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        if (isMobile) {
+          if (channel.referer) request.headers["Referer"] = channel.referer;
+          if (channel.userAgent) request.headers["User-Agent"] = channel.userAgent;
+        }
+
         if (channel.token && (type === shaka.net.NetworkingEngine.RequestType.MANIFEST || 
                             type === shaka.net.NetworkingEngine.RequestType.SEGMENT)) {
           const sep = request.uris[0].includes("?") ? "&" : "?";
@@ -832,6 +851,23 @@
           videoContainer.classList.remove('buffering');
         }
       });
+
+      // Global control visibility timer
+      let controlTimer;
+      const hideControls = () => {
+        if (videoElement.paused) return;
+        videoContainer.classList.add('controls-hidden');
+      };
+      const showControls = () => {
+        videoContainer.classList.remove('controls-hidden');
+        clearTimeout(controlTimer);
+        controlTimer = setTimeout(hideControls, 3000);
+      };
+
+      videoContainer.addEventListener('mousemove', showControls);
+      videoContainer.addEventListener('touchstart', showControls);
+      videoElement.addEventListener('play', showControls);
+      videoElement.addEventListener('pause', showControls);
 
       player.addEventListener('error', () => {
         // Auto-reconnect if error occurs
@@ -894,12 +930,29 @@
       playingMeta.textContent = channel.category || 'Live Stream';
       player.appData_channel = channel;
 
+      let streamUrl = channel.mpd;
+
+      // PC Playback Bypass: Handle forbidden headers for desktop browsers
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (!isMobile && (channel.userAgent || channel.referer)) {
+        console.log('Applying PC Header Bypass...');
+        const headers = [];
+        if (channel.userAgent) headers.push(`User-Agent:${channel.userAgent}`);
+        if (channel.referer) headers.push(`Referer:${channel.referer}`);
+        
+        const sep = streamUrl.includes('?') ? '&' : '?';
+        streamUrl += `${sep}headers=${encodeURIComponent(headers.join('|'))}`;
+      }
+
       player.configure({
-        drm: channel.drm ? { clearKeys: channel.drm } : { clearKeys: {} }
+        drm: channel.drm ? { clearKeys: channel.drm } : { clearKeys: {} },
+        manifest: {
+          retryParameters: { maxAttempts: 5 }
+        }
       });
 
       try {
-        await player.load(channel.mpd);
+        await player.load(streamUrl);
         videoElement.play();
         updateFavBtnState(channel.id);
       } catch (e) {
