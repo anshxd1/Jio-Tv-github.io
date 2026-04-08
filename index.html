@@ -822,7 +822,7 @@
 
     async function initApp() {
       try {
-        const response = await fetch('https://raw.githubusercontent.com/anshxd1/jstr/refs/heads/main/jstr.json');
+        const response = await fetch('https://raw.githubusercontent.com/anshxd1/jstr/refs/heads/main/newjstr.json');
         const data = await response.json();
         
         allChannels = data.filter(c => c.mpd).map(c => ({
